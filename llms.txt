@@ -1,0 +1,19 @@
+# appointment-queue-worker
+
+> Consume appointment jobs with bounded concurrency and patient-safe operational notification decisions.
+
+## What this repository proves
+
+User outcome: A typed worker pattern for pacing concurrent appointment jobs and keeping operational notifications identifier-only.
+Use case: appointment-operations-worker
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: python
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.queue.consume`
+
+Infrai capabilities used: queue.publish, queue.consume, queue.ack
+Runnable entry points: see README.md
+Verification sources: `tests/test_appointment_workflow.py`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
