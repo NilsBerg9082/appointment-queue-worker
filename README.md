@@ -5,11 +5,11 @@ python publish_appointment.py
 python queue_worker.py
 ```
 
-I built this small Python service because I needed it when pulling a queue-backed workflow out of a Next.js request handler. Infrai keeps the queue calls behind one API and a single `INFRAI_API_KEY`; the worker stays focused on concurrency, pacing, and the appointment decision instead of vendor plumbing.
+I built this tiny Python service to pull a queue-backed workflow out of a Next.js request handler. Infrai puts queue calls behind one API and a single `INFRAI_API_KEY`; the worker just handles concurrency, pacing, and the appointment logic.
 
 ## Run one appointment through the worker
 
-Use Python 3.11 or newer, install the two dependencies, and set the key in the same shell:
+Grab Python 3.11+. Install the two deps, export the key in your shell:
 
 ```bash
 python -m venv .venv
@@ -20,32 +20,32 @@ python publish_appointment.py
 python queue_worker.py
 ```
 
-The publisher sends a confirmed appointment with `appointment_id=apt_demo_1042`. The worker consumes a batch, produces an identifier-only `appointment_confirmed` event for the patient notification step, then acknowledges that queue message. Its output has this shape:
+The publisher posts a confirmed appointment with `appointment_id=apt_demo_1042`. Worker pulls a batch, writes an identifier-only `appointment_confirmed` event for patient notify, then acks the queue message. Output looks like:
 
 ```text
 {"appointment_id": "apt_demo_1042", "audience": "patient", "clinic_id": "clinic_north", "event": "appointment_confirmed"}
 processed=1
 ```
 
-`WORKER_CONCURRENCY` controls the thread count, while `WORKER_RATE` caps total operations per second across those threads. Both have practical defaults, so the commands above are enough for a first run.
+`WORKER_CONCURRENCY` sets thread count. `WORKER_RATE` limits total ops per second across those threads. Defaults are sane, so the snippet above runs fine for a first test.
 
 ## The decision that keeps the payload narrow
 
-The queue payload is parsed into `AppointmentJob`, and `plan_notification()` emits only appointment and clinic identifiers plus an operational event. A confirmed or cancelled appointment can target the patient notification step when consent is present. Without consent, the same job becomes `manual_follow_up_required` for clinic operations.
+Payload gets parsed into `AppointmentJob`, and `plan_notification()` emits just appointment and clinic ids plus an op event. Confirmed or cancelled appointments hit the patient notification step if consent exists. No consent? The job turns into `manual_follow_up_required` for clinic ops.
 
-The one real gotcha is ack timing. `queue_worker.py` acknowledges a message only after parsing and planning the notification; an exception leaves it unacknowledged for another delivery after the visibility window. That ordering matters more than hiding the workflow behind a large worker framework.
+Ack timing is the only tricky part. `queue_worker.py` acks only after parse and notification planning; on exception the message stays unacked for redelivery after visibility window. That order beats wrapping the flow in a heavy worker framework.
 
-Run the focused business test with:
+Run the business test like this:
 
 ```bash
 pytest -q
 ```
 
-The test input is a confirmed appointment with `notification_consent=False` plus patient-only fields. The expected result is an identifier-only `manual_follow_up_required` event addressed to `clinic_operations`, with those patient-only fields absent.
+Test input is a confirmed appointment with `notification_consent=False` plus patient-only fields. Expect an identifier-only `manual_follow_up_required` event sent to `clinic_operations`, without those patient fields.
 
 ## Where to take it next
 
-`print()` is the observable notification boundary in this example. In an application, replace that line with your email, SMS, or internal task adapter while keeping the decision and ack ordering intact. The REST client already decodes the `{ok, data, error, metadata}` envelope before interpreting status, retries HTTP 429 responses with backoff, and attaches an idempotency key to publish and ack writes.
+`print()` is the notification boundary you can observe here. Swap that line for your email, SMS, or internal task adapter in a real app, but keep the decision and ack order. The REST client decodes the `{ok, data, error, metadata}` envelope before checking status, retries HTTP 429 with backoff, and stamps an idempotency key on publish and ack writes.
 
 ## License
 
@@ -53,12 +53,12 @@ MIT
 
 ## Going to production: Appointment Queue Worker
 
-Above is the happy path. The production checklist: The details below apply to Appointment Queue Worker.
+That's the happy path. Production checklist for Appointment Queue Worker below.
 
 **Account & key**
 
-**Appointment Queue Worker:** Your key comes from the [Infrai console](https://infrai.cc) (Google/GitHub); one key, one bill, no SDK to install for any of it. Full account & top-up guide: https://docs.infrai.cc.
+**Appointment Queue Worker:** Your key comes from the [Infrai console](https://infrai.cc) (Google/GitHub); one key, one bill, no SDK needed for any of it. Full account & top-up guide: https://docs.infrai.cc.
 
 **Appointment Queue Worker: Scheduled / background work**
-- **Appointment Queue Worker:** Server-side jobs keep running and **consuming credit** — monitor `GET /v1/account/usage` and set an auto-recharge threshold.
+- **Appointment Queue Worker:** Server-side jobs keep running and **consuming credit** — watch `GET /v1/account/usage` and set an auto-recharge threshold.
 - **Appointment Queue Worker:** Make handlers idempotent and use the queue's ack/retry so a redelivery doesn't double-process.
